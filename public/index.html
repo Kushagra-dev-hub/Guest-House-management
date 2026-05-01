@@ -1,0 +1,74 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LNMIIT Guesthouse Booking</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">LNMIIT Guesthouse</a>
+        <div class="nav-links" id="navLinks">
+            <!-- Dynamic Links will be injected here -->
+        </div>
+    </nav>
+
+    <div class="container hero" id="heroSection">
+        <h1>Welcome to LNMIIT Guesthouse</h1>
+        <p>Book rooms for parents and visitors easily. A modern platform for guesthouse management.</p>
+        <div class="flex justify-center gap-4 mt-8" style="justify-content: center;">
+            <a href="/login.html" class="btn btn-secondary">Login</a>
+            <a href="/register.html" class="btn btn-primary">Get Started</a>
+        </div>
+    </div>
+
+    <script>
+        // Check Auth Status on Load
+        async function checkAuth() {
+            try {
+                const res = await fetch('/auth/me');
+                const data = await res.json();
+                
+                if (res.ok && data.user) {
+                    // User is logged in
+                    const navLinks = document.getElementById('navLinks');
+                    navLinks.innerHTML = `
+                        <span style="color: var(--text-muted);">Hello, ${data.user.name.split(' ')[0]}</span>
+                        <a href="${data.user.role === 'ADMIN' ? '/admin.html' : '/dashboard.html'}" class="btn btn-primary" style="padding: 0.5rem 1rem;">Dashboard</a>
+                        <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+                    `;
+                    
+                    // Update Hero
+                    document.getElementById('heroSection').innerHTML = `
+                        <h1>Welcome Back, ${data.user.name.split(' ')[0]}</h1>
+                        <p>Manage your guesthouse bookings efficiently.</p>
+                        <div class="flex justify-center gap-4 mt-8" style="justify-content: center;">
+                            <a href="${data.user.role === 'ADMIN' ? '/admin.html' : '/dashboard.html'}" class="btn btn-primary">Go to Dashboard</a>
+                        </div>
+                    `;
+                } else {
+                    // Not logged in
+                    document.getElementById('navLinks').innerHTML = `
+                        <a href="/login.html">Login</a>
+                        <a href="/register.html" class="btn btn-primary" style="padding: 0.5rem 1rem;">Sign Up</a>
+                    `;
+                }
+            } catch (error) {
+                console.error('Error checking auth:', error);
+            }
+        }
+
+        async function logout() {
+            try {
+                await fetch('/auth/logout', { method: 'POST' });
+                window.location.href = '/login.html';
+            } catch (error) {
+                console.error('Logout error:', error);
+            }
+        }
+
+        checkAuth();
+    </script>
+</body>
+</html>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Admin Dashboard - HostelCare</title>
+    <link rel="stylesheet" href="index.css">
+    <style>
+        .tabs {
+            display: flex;
+            gap: 1rem;
+            margin-bottom: 2rem;
+            border-bottom: 1px solid var(--card-border);
+            padding-bottom: 1rem;
+        }
+        .tab {
+            background: none;
+            border: none;
+            color: var(--text-muted);
+            font-size: 1.1rem;
+            font-weight: 500;
+            cursor: pointer;
+            padding: 0.5rem 1rem;
+            border-radius: 8px;
+            transition: all 0.2s;
+        }
+        .tab.active {
+            color: var(--primary);
+            background: rgba(99, 102, 241, 0.1);
+        }
+    </style>
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">LNMIIT Guesthouse Admin</a>
+        <div class="nav-links">
+            <span id="adminName" style="color: var(--text-muted);"></span>
+            <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container mt-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">Guesthouse Administration</h1>
+                <p style="color: var(--text-muted);">Manage room bookings and requests</p>
+            </div>
+        </div>
+
+        <div class="tabs">
+            <button class="tab active" onclick="switchTab('active')" id="tab-active">Booking Requests</button>
+            <button class="tab" onclick="switchTab('resolved')" id="tab-resolved">Confirmed</button>
+        </div>
+
+        <div id="alertBox" class="alert"></div>
+
+        <div id="bookingsGrid" class="dashboard-grid">
+            <p style="color: var(--text-muted);">Loading bookings...</p>
+        </div>
+    </div>
+
+    <script>
+        let currentTab = 'active';
+
+        async function init() {
+            try {
+                const res = await fetch('/auth/me');
+                const data = await res.json();
+                
+                if (res.ok && data.user) {
+                    if (!['ADMIN'].includes(data.user.role) && !data.user.role.startsWith('ADMIN')) {
+                        // Not an admin
+                        window.location.href = '/dashboard.html';
+                        return;
+                    }
+                    document.getElementById('adminName').innerText = `Admin: ${data.user.name}`;
+                    loadBookings();
+                } else {
+                    window.location.href = '/login.html';
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                window.location.href = '/login.html';
+            }
+        }
+
+        function switchTab(tab) {
+            currentTab = tab;
+            document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+            document.getElementById(`tab-${tab}`).classList.add('active');
+            loadBookings();
+        }
+
+        async function loadBookings() {
+            const grid = document.getElementById('bookingsGrid');
+            grid.innerHTML = '<p style="color: var(--text-muted);">Loading...</p>';
+            
+            const endpoint = currentTab === 'active' ? '/bookings/all' : '/bookings/resolved';
+            
+            try {
+                const res = await fetch(endpoint);
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    if (data.bookings.length === 0) {
+                        grid.innerHTML = `<div class="glass-card" style="grid-column: 1 / -1; text-align: center;"><p style="color: var(--text-muted);">No ${currentTab} bookings found.</p></div>`;
+                        return;
+                    }
+
+                    grid.innerHTML = data.bookings.map(book => `
+                        <div class="glass-card complaint-card">
+                            <div>
+                                <div class="flex justify-between items-center mb-4">
+                                    <span class="badge badge-${book.status.replace(/\s+/g, '-').toLowerCase()}">${book.status}</span>
+                                    <span style="color: var(--text-muted); font-size: 0.75rem;">
+                                        Requested: ${new Date(book.createdAt).toLocaleDateString()}
+                                    </span>
+                                </div>
+                                <h3 style="margin-bottom: 0.25rem;">${book.roomType} Room</h3>
+                                <p style="font-size: 0.75rem; color: var(--primary); margin-bottom: 1rem;">
+                                    Guest: ${book.user?.name} • Email: ${book.user?.email} • Mobile: ${book.user?.mobileNo}
+                                </p>
+                                <p style="margin-bottom: 0.5rem; color: var(--text-muted);">
+                                    <strong>Check-in:</strong> ${new Date(book.checkInDate).toLocaleDateString()}<br>
+                                    <strong>Check-out:</strong> ${new Date(book.checkOutDate).toLocaleDateString()}
+                                </p>
+                                <p><strong>Guests:</strong> ${book.numberOfGuests}</p>
+                            </div>
+                            
+                            ${currentTab === 'active' ? `
+                            <div class="complaint-footer mt-4">
+                                <select id="status-${book._id}" class="form-control" style="width: auto; padding: 0.5rem; font-size: 0.875rem;">
+                                    <option value="Pending" ${book.status === 'Pending' ? 'selected' : ''}>Pending</option>
+                                    <option value="Confirmed" ${book.status === 'Confirmed' ? 'selected' : ''}>Confirm</option>
+                                    <option value="Rejected" ${book.status === 'Rejected' ? 'selected' : ''}>Reject</option>
+                                </select>
+                                <button onclick="updateStatus('${book._id}')" class="btn btn-primary" style="padding: 0.5rem 1rem; font-size: 0.875rem;">Update</button>
+                            </div>
+                            ` : ''}
+                        </div>
+                    `).join('');
+                } else {
+                    grid.innerHTML = `<p style="color: var(--error);">${data.error || 'Failed to load bookings.'}</p>`;
+                }
+            } catch (error) {
+                grid.innerHTML = '<p style="color: var(--error);">Failed to load bookings.</p>';
+            }
+        }
+
+        async function updateStatus(bookingId) {
+            const status = document.getElementById(`status-${bookingId}`).value;
+            const alertBox = document.getElementById('alertBox');
+            
+            try {
+                const res = await fetch('/bookings/update-status', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ bookingId, status })
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    alertBox.className = 'alert alert-success';
+                    alertBox.style.display = 'block';
+                    alertBox.innerText = 'Status updated successfully!';
+                    loadBookings(); // Reload the list
+                    
+                    setTimeout(() => alertBox.style.display = 'none', 3000);
+                } else {
+                    alertBox.className = 'alert alert-error';
+                    alertBox.style.display = 'block';
+                    alertBox.innerText = data.error || 'Failed to update status';
+                }
+            } catch (error) {
+                alertBox.className = 'alert alert-error';
+                alertBox.style.display = 'block';
+                alertBox.innerText = 'Something went wrong.';
+            }
+        }
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login.html';
+        }
+
+        init();
+    </script>
+</body>
+</html>

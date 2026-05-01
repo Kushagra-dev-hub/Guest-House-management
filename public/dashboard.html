@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dashboard - HostelCare</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+    <nav class="nav">
+        <a href="/" class="nav-brand">LNMIIT Guesthouse</a>
+        <div class="nav-links">
+            <span id="userName" style="color: var(--text-muted);"></span>
+            <button onclick="logout()" class="btn btn-secondary" style="padding: 0.5rem 1rem;">Logout</button>
+        </div>
+    </nav>
+
+    <div class="container mt-8">
+        <div class="flex justify-between items-center mb-8">
+            <div>
+                <h1 style="font-size: 2rem; margin-bottom: 0.5rem;">My Bookings</h1>
+                <p style="color: var(--text-muted);">Manage your guesthouse room reservations</p>
+            </div>
+            <button onclick="toggleAddModal()" class="btn btn-primary">+ Book Room</button>
+        </div>
+
+        <div id="alertBox" class="alert"></div>
+
+        <!-- Add Booking Form (Hidden by default) -->
+        <div id="addBookingSection" class="glass-card mb-8 hidden">
+            <h2 class="mb-4">Request a Room Booking</h2>
+            <form id="addBookingForm">
+                <div class="flex gap-4">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="checkInDate" class="form-label">Check-in Date</label>
+                        <input type="date" id="checkInDate" class="form-control" required>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="checkOutDate" class="form-label">Check-out Date</label>
+                        <input type="date" id="checkOutDate" class="form-control" required>
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                    <div class="form-group" style="flex: 1;">
+                        <label for="roomType" class="form-label">Room Type</label>
+                        <select id="roomType" class="form-control" required>
+                            <option value="">Select Room Type</option>
+                            <option value="Standard">Standard</option>
+                            <option value="Deluxe">Deluxe</option>
+                            <option value="Suite">Suite</option>
+                        </select>
+                    </div>
+                    <div class="form-group" style="flex: 1;">
+                        <label for="numberOfGuests" class="form-label">Number of Guests</label>
+                        <input type="number" id="numberOfGuests" class="form-control" min="1" max="10" required>
+                    </div>
+                </div>
+
+                <div class="flex gap-4">
+                    <button type="button" onclick="toggleAddModal()" class="btn btn-secondary">Cancel</button>
+                    <button type="submit" class="btn btn-primary">Submit Booking</button>
+                </div>
+            </form>
+        </div>
+
+        <div id="bookingsGrid" class="dashboard-grid">
+            <!-- Bookings will be loaded here -->
+            <p style="color: var(--text-muted);">Loading bookings...</p>
+        </div>
+    </div>
+
+    <script>
+        let currentUser = null;
+
+        async function init() {
+            try {
+                const res = await fetch('/auth/me');
+                const data = await res.json();
+                
+                if (res.ok && data.user) {
+                    if (data.user.role === 'ADMIN') {
+                        window.location.href = '/admin.html';
+                        return;
+                    }
+                    currentUser = data.user;
+                    document.getElementById('userName').innerText = `Hello, ${currentUser.name.split(' ')[0]}`;
+
+                    loadBookings();
+                } else {
+                    window.location.href = '/login.html';
+                }
+            } catch (error) {
+                console.error('Auth check error:', error);
+                window.location.href = '/login.html';
+            }
+        }
+
+        async function loadBookings() {
+            const grid = document.getElementById('bookingsGrid');
+            try {
+                const res = await fetch('/bookings/my-bookings');
+                const data = await res.json();
+
+                if (res.ok && data.success) {
+                    if (data.bookings.length === 0) {
+                        grid.innerHTML = '<div class="glass-card" style="grid-column: 1 / -1; text-align: center;"><p style="color: var(--text-muted);">You have no bookings yet.</p></div>';
+                        return;
+                    }
+
+                    grid.innerHTML = data.bookings.map(book => `
+                        <div class="glass-card complaint-card">
+                            <div>
+                                <div class="flex justify-between items-center mb-4">
+                                    <span class="badge badge-${book.status.replace(/\s+/g, '-').toLowerCase()}">${book.status}</span>
+                                    <span style="color: var(--text-muted); font-size: 0.75rem;">
+                                        ${new Date(book.createdAt).toLocaleDateString()}
+                                    </span>
+                                </div>
+                                <h3>${book.roomType} Room</h3>
+                                <p style="margin-bottom: 0.5rem; color: var(--text-muted);">
+                                    <strong>Check-in:</strong> ${new Date(book.checkInDate).toLocaleDateString()}<br>
+                                    <strong>Check-out:</strong> ${new Date(book.checkOutDate).toLocaleDateString()}
+                                </p>
+                                <p><strong>Guests:</strong> ${book.numberOfGuests}</p>
+                            </div>
+                        </div>
+                    `).join('');
+                } else {
+                    grid.innerHTML = '<p style="color: var(--error);">Failed to load bookings.</p>';
+                }
+            } catch (error) {
+                grid.innerHTML = '<p style="color: var(--error);">Failed to load bookings.</p>';
+            }
+        }
+
+        function toggleAddModal() {
+            const modal = document.getElementById('addBookingSection');
+            modal.classList.toggle('hidden');
+        }
+
+        document.getElementById('addBookingForm').addEventListener('submit', async (e) => {
+            e.preventDefault();
+            const alertBox = document.getElementById('alertBox');
+            
+            const payload = {
+                checkInDate: document.getElementById('checkInDate').value,
+                checkOutDate: document.getElementById('checkOutDate').value,
+                roomType: document.getElementById('roomType').value,
+                numberOfGuests: document.getElementById('numberOfGuests').value
+            };
+
+            try {
+                const res = await fetch('/bookings/add', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify(payload)
+                });
+                
+                const data = await res.json();
+                
+                if (res.ok && data.success) {
+                    alertBox.className = 'alert alert-success';
+                    alertBox.style.display = 'block';
+                    alertBox.innerText = 'Booking requested successfully!';
+                    
+                    document.getElementById('addBookingForm').reset();
+                    toggleAddModal();
+                    loadBookings();
+                    
+                    setTimeout(() => alertBox.style.display = 'none', 3000);
+                } else {
+                    alertBox.className = 'alert alert-error';
+                    alertBox.style.display = 'block';
+                    alertBox.innerText = data.error || 'Failed to submit booking';
+                }
+            } catch (error) {
+                alertBox.className = 'alert alert-error';
+                alertBox.style.display = 'block';
+                alertBox.innerText = 'Something went wrong.';
+            }
+        });
+
+        async function logout() {
+            await fetch('/auth/logout', { method: 'POST' });
+            window.location.href = '/login.html';
+        }
+
+        init();
+    </script>
+</body>
+</html>
